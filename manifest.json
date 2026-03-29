@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "UX Pulse",
+  "version": "1.0.0",
+  "description": "Automated UX session recording — track clicks, scrolls, navigation, hesitation, and API requests with structured event logs.",
+  "permissions": [
+    "tabs",
+    "webNavigation",
+    "storage",
+    "alarms",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "UX Pulse",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/tracker.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "options_page": "src/dashboard/dashboard.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/network-interceptor.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  }
+}
