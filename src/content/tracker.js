@@ -25,6 +25,7 @@
     LOG_EVENT: 'LOG_EVENT', LOG_BATCH: 'LOG_BATCH',
     RECORDING_STARTED: 'RECORDING_STARTED', RECORDING_STOPPED: 'RECORDING_STOPPED',
     GET_STATUS: 'GET_STATUS', PING: 'PING',
+    SHOW_RED_BORDER: 'SHOW_RED_BORDER', HIDE_RED_BORDER: 'HIDE_RED_BORDER',
   };
 
   const INTERACTIVE = 'a, button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [tabindex], label, summary, [onclick]';
@@ -60,6 +61,24 @@
 
   // Hover dwell
   const hoverTimers = new WeakMap();
+
+  // Red border overlay
+  let redBorderElement = null;
+
+  function showRedBorder() {
+    if (redBorderElement) return;
+    redBorderElement = document.createElement('div');
+    redBorderElement.id = '__ux-pulse-recording-border__';
+    redBorderElement.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;border:4px solid #EF4444;pointer-events:none;z-index:2147483647;box-sizing:border-box;';
+    (document.body || document.documentElement).appendChild(redBorderElement);
+  }
+
+  function hideRedBorder() {
+    if (redBorderElement) {
+      redBorderElement.remove();
+      redBorderElement = null;
+    }
+  }
 
   // ── Utilities ─────────────────────────────────────────────
 
@@ -575,6 +594,7 @@
     }
     clickHistory = [];
     console.log('[UX Pulse] Tracking stopped');
+    hideRedBorder();
   }
 
   // ── Message Listener ──────────────────────────────────────
@@ -587,6 +607,13 @@
       sendResponse({ success: true });
     } else if (message.type === MessageType.RECORDING_STOPPED) {
       stopTracking();
+      hideRedBorder();
+      sendResponse({ success: true });
+    } else if (message.type === MessageType.SHOW_RED_BORDER) {
+      showRedBorder();
+      sendResponse({ success: true });
+    } else if (message.type === MessageType.HIDE_RED_BORDER) {
+      hideRedBorder();
       sendResponse({ success: true });
     } else {
       sendResponse({ success: true });

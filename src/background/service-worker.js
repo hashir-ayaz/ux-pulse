@@ -17,6 +17,8 @@ const EventType = {
   SCREENSHOT: 'SCREENSHOT',
   PAGE_VISIBLE: 'PAGE_VISIBLE', PAGE_HIDDEN: 'PAGE_HIDDEN',
   WINDOW_RESIZE: 'WINDOW_RESIZE', COPY: 'COPY', PASTE: 'PASTE',
+  TASK_START: 'TASK_START', TASK_COMPLETE: 'TASK_COMPLETE', TASK_SKIP: 'TASK_SKIP',
+  STUDY_START: 'STUDY_START', STUDY_END: 'STUDY_END',
 };
 
 const MessageType = {
@@ -28,7 +30,18 @@ const MessageType = {
   CLEAR_ALL: 'CLEAR_ALL', DELETE_SESSION: 'DELETE_SESSION', GET_SESSION_SCREENSHOTS: 'GET_SESSION_SCREENSHOTS',
   RECORDING_STARTED: 'RECORDING_STARTED', RECORDING_STOPPED: 'RECORDING_STOPPED',
   PING: 'PING',
+  START_STUDY: 'START_STUDY', START_TASK: 'START_TASK', COMPLETE_TASK: 'COMPLETE_TASK',
+  SKIP_TASK: 'SKIP_TASK', GET_STUDY_STATE: 'GET_STUDY_STATE',
+  START_SCREEN_RECORDING: 'START_SCREEN_RECORDING', STOP_SCREEN_RECORDING: 'STOP_SCREEN_RECORDING',
+  SCREEN_RECORDING_ACTIVE: 'SCREEN_RECORDING_ACTIVE', SCREEN_RECORDING_STOPPED: 'SCREEN_RECORDING_STOPPED',
+  CLOSE_RECORDER: 'CLOSE_RECORDER', SHOW_RED_BORDER: 'SHOW_RED_BORDER', HIDE_RED_BORDER: 'HIDE_RED_BORDER',
 };
+
+const StudyTasks = [
+  { taskNumber: 1, title: 'Register / Sign In', goal: 'Create a new account using a phone number', description: 'Starting from the Crumble homepage, register for a new account using your phone number. Complete the registration process successfully.' },
+  { taskNumber: 2, title: 'Add to Cart & Checkout', goal: 'Find the Cookies & Cream Shake, add it to your cart, and navigate to the checkout page', description: 'Browse the menu to find the Cookies & Cream Shake. Add it to your cart and proceed all the way to the checkout page.' },
+  { taskNumber: 3, title: 'Contact Customer Support', goal: 'Send a message to customer support via the chat feature', description: 'Locate the customer support chat feature on the website and send a message to the support team.' },
+];
 
 // ── IndexedDB (lightweight inline version) ──────────────────
 
@@ -137,25 +150,29 @@ async function dbDelete(store, key) {
 // ── Session State ───────────────────────────────────────────
 
 let currentSession = null; // { id, userEmail, taskName, startTime, eventCount }
+let studyState = null; // { participantName, participantEmail, studyId, currentTaskIndex, currentSessionId, taskSessions, recorderWindowId, isRecording }
 
 async function restoreState() {
-  const data = await chrome.storage.session.get('currentSession');
+  const data = await chrome.storage.session.get(['currentSession', 'studyState']);
   if (data.currentSession) {
     currentSession = data.currentSession;
+  }
+  if (data.studyState) {
+    studyState = data.studyState;
   }
 }
 
 async function persistState() {
-  await chrome.storage.session.set({ currentSession });
+  await chrome.storage.session.set({ currentSession, studyState });
 }
 
-// Restore on service worker startup
-restoreState();
+// Restore on service worker startup — must complete before handling messages
+const _stateReady = restoreState();
 
 // ── Message Handler ─────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  handleMessage(message, sender).then(sendResponse).catch((err) => {
+  _stateReady.then(() => handleMessage(message, sender)).then(sendResponse).catch((err) => {
     console.error('[UX Pulse] Message error:', err);
     sendResponse({ success: false, error: err.message });
   });
@@ -244,6 +261,7 @@ async function handleMessage(msg, sender) {
         success: true,
         isRecording: !!currentSession,
         session: currentSession,
+        studyState: studyState,
       };
     }
 
@@ -349,7 +367,7 @@ async function handleMessage(msg, sender) {
         events.sort((a, b) => a.timestamp - b.timestamp);
         allRows = allRows.concat(buildRows(session, events));
       }
-      const header = 'session_id,user_email,task_name,task_status,session_duration_ms,event_id,event_type,event_timestamp,event_timestamp_readable,event_url,event_data';
+      const header = 'session_id,study_id,user_name,user_email,task_name,task_number,task_status,session_duration_ms,event_id,event_type,event_timestamp,event_timestamp_readable,event_url,event_data';
       return { success: true, csv: header + '\n' + allRows.join('\n') };
     }
 
@@ -381,6 +399,284 @@ async function handleMessage(msg, sender) {
 
     case MessageType.PING: {
       return { success: true, alive: true };
+    }
+
+    case MessageType.START_STUDY: {
+      studyState = {
+        participantName: msg.participantName,
+        participantEmail: msg.participantEmail,
+        studyId: crypto.randomUUID(),
+        currentTaskIndex: 0,
+        currentSessionId: null,
+        taskSessions: [],
+        recorderWindowId: null,
+        isRecording: false,
+      };
+      await persistState();
+
+      // Open recorder window
+      try {
+        const win = await chrome.windows.create({
+          url: 'src/recorder/recorder.html',
+          type: 'popup',
+          width: 420,
+          height: 220,
+          top: 100,
+          left: 100,
+        });
+        studyState.recorderWindowId = win.id;
+        await persistState();
+      } catch (err) {
+        console.warn('[UX Pulse] Failed to open recorder window:', err);
+      }
+
+      // Log study start event
+      await dbAdd('events', {
+        sessionId: studyState.studyId,
+        type: EventType.STUDY_START,
+        timestamp: Date.now(),
+        url: '',
+        tabId: 0,
+        data: { participantName: msg.participantName, participantEmail: msg.participantEmail },
+      });
+
+      return { success: true, studyState };
+    }
+
+    case MessageType.START_TASK: {
+      if (!studyState) return { success: false, error: 'No active study' };
+
+      const taskIndex = msg.taskIndex;
+      const task = StudyTasks[taskIndex];
+      if (!task) return { success: false, error: 'Invalid task index' };
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const startUrl = tab ? tab.url : '';
+
+      const session = {
+        id: crypto.randomUUID(),
+        studyId: studyState.studyId,
+        taskNumber: task.taskNumber,
+        userEmail: studyState.participantEmail,
+        userName: studyState.participantName,
+        taskName: task.title,
+        taskDescription: task.goal,
+        status: 'active',
+        startTime: Date.now(),
+        endTime: null,
+        durationMs: null,
+        startUrl,
+        eventCount: 0,
+      };
+      await dbPut('sessions', session);
+
+      currentSession = {
+        id: session.id,
+        userEmail: session.userEmail,
+        taskName: session.taskName,
+        startTime: session.startTime,
+        eventCount: 0,
+      };
+
+      studyState.currentSessionId = session.id;
+      studyState.currentTaskIndex = taskIndex;
+      await persistState();
+
+      // Log task start event
+      await dbAdd('events', {
+        sessionId: session.id,
+        type: EventType.TASK_START,
+        timestamp: Date.now(),
+        url: startUrl,
+        tabId: 0,
+        data: { taskNumber: task.taskNumber, taskName: task.title },
+      });
+      currentSession.eventCount = 1;
+      await persistState();
+
+      // Tell recorder to start recording (retry a few times in case it's still loading)
+      const recMsg = {
+        type: MessageType.START_SCREEN_RECORDING,
+        taskNumber: task.taskNumber,
+        participantName: studyState.participantName,
+      };
+      chrome.runtime.sendMessage(recMsg).catch(() => {
+        setTimeout(() => chrome.runtime.sendMessage(recMsg).catch(() => {}), 500);
+        setTimeout(() => chrome.runtime.sendMessage(recMsg).catch(() => {}), 1500);
+      });
+
+      // Broadcast to all content scripts
+      broadcastToTabs(MessageType.RECORDING_STARTED, { sessionId: session.id });
+      broadcastToTabs(MessageType.SHOW_RED_BORDER, {});
+
+      return { success: true, sessionId: session.id, startTime: session.startTime };
+    }
+
+    case MessageType.COMPLETE_TASK: {
+      if (!currentSession || !studyState) return { success: false, error: 'No active task' };
+
+      const session = await dbGet('sessions', currentSession.id);
+      if (session) {
+        session.status = 'completed';
+        session.endTime = Date.now();
+        session.durationMs = session.endTime - session.startTime;
+        session.eventCount = currentSession.eventCount;
+        await dbPut('sessions', session);
+
+        await dbAdd('events', {
+          sessionId: session.id,
+          type: EventType.TASK_COMPLETE,
+          timestamp: Date.now(),
+          url: '',
+          tabId: 0,
+          data: { durationMs: session.durationMs, taskNumber: session.taskNumber },
+        });
+      }
+
+      studyState.taskSessions.push({
+        sessionId: currentSession.id,
+        taskNumber: StudyTasks[studyState.currentTaskIndex].taskNumber,
+        taskName: StudyTasks[studyState.currentTaskIndex].title,
+        status: 'completed',
+        startTime: currentSession.startTime,
+        endTime: Date.now(),
+        durationMs: session ? session.durationMs : 0,
+        eventCount: currentSession.eventCount,
+      });
+
+      const isLastTask = studyState.currentTaskIndex >= StudyTasks.length - 1;
+
+      // Tell recorder to stop
+      chrome.runtime.sendMessage({ type: MessageType.STOP_SCREEN_RECORDING }).catch(() => {});
+
+      // Broadcast stop to content scripts
+      broadcastToTabs(MessageType.RECORDING_STOPPED, {});
+      broadcastToTabs(MessageType.HIDE_RED_BORDER, {});
+
+      currentSession = null;
+      studyState.currentSessionId = null;
+
+      if (isLastTask) {
+        // Log study end
+        await dbAdd('events', {
+          sessionId: studyState.studyId,
+          type: EventType.STUDY_END,
+          timestamp: Date.now(),
+          url: '',
+          tabId: 0,
+          data: { taskSessions: studyState.taskSessions },
+        });
+
+        // Close recorder window
+        if (studyState.recorderWindowId) {
+          chrome.runtime.sendMessage({ type: MessageType.CLOSE_RECORDER }).catch(() => {});
+        }
+      }
+
+      await persistState();
+
+      return { success: true, isLastTask, taskSessions: studyState.taskSessions, studyState };
+    }
+
+    case MessageType.SKIP_TASK: {
+      if (!currentSession || !studyState) return { success: false, error: 'No active task' };
+
+      const session = await dbGet('sessions', currentSession.id);
+      if (session) {
+        session.status = 'skipped';
+        session.endTime = Date.now();
+        session.durationMs = session.endTime - session.startTime;
+        session.eventCount = currentSession.eventCount;
+        await dbPut('sessions', session);
+
+        await dbAdd('events', {
+          sessionId: session.id,
+          type: EventType.TASK_SKIP,
+          timestamp: Date.now(),
+          url: '',
+          tabId: 0,
+          data: { durationMs: session.durationMs, taskNumber: session.taskNumber },
+        });
+      }
+
+      studyState.taskSessions.push({
+        sessionId: currentSession.id,
+        taskNumber: StudyTasks[studyState.currentTaskIndex].taskNumber,
+        taskName: StudyTasks[studyState.currentTaskIndex].title,
+        status: 'skipped',
+        startTime: currentSession.startTime,
+        endTime: Date.now(),
+        durationMs: session ? session.durationMs : 0,
+        eventCount: currentSession.eventCount,
+      });
+
+      const isLastTask = studyState.currentTaskIndex >= StudyTasks.length - 1;
+
+      chrome.runtime.sendMessage({ type: MessageType.STOP_SCREEN_RECORDING }).catch(() => {});
+      broadcastToTabs(MessageType.RECORDING_STOPPED, {});
+      broadcastToTabs(MessageType.HIDE_RED_BORDER, {});
+
+      currentSession = null;
+      studyState.currentSessionId = null;
+
+      if (isLastTask) {
+        await dbAdd('events', {
+          sessionId: studyState.studyId,
+          type: EventType.STUDY_END,
+          timestamp: Date.now(),
+          url: '',
+          tabId: 0,
+          data: { taskSessions: studyState.taskSessions },
+        });
+        if (studyState.recorderWindowId) {
+          chrome.runtime.sendMessage({ type: MessageType.CLOSE_RECORDER }).catch(() => {});
+        }
+      }
+
+      await persistState();
+
+      return { success: true, isLastTask, taskSessions: studyState.taskSessions, studyState };
+    }
+
+    case MessageType.GET_STUDY_STATE: {
+      return { success: true, studyState };
+    }
+
+    case MessageType.SCREEN_RECORDING_ACTIVE: {
+      if (studyState) {
+        studyState.isRecording = true;
+        await persistState();
+      }
+      return { success: true };
+    }
+
+    case MessageType.SCREEN_RECORDING_STOPPED: {
+      if (studyState) {
+        studyState.isRecording = false;
+        await persistState();
+      }
+      return { success: true };
+    }
+
+    case 'RESET_STUDY': {
+      currentSession = null;
+      studyState = null;
+      await persistState();
+      return { success: true };
+    }
+
+    case 'RECORDER_READY': {
+      // Recorder window just loaded — if a task is actively recording, tell it to start
+      if (studyState && currentSession) {
+        const task = StudyTasks[studyState.currentTaskIndex];
+        return {
+          success: true,
+          shouldRecord: true,
+          taskNumber: task ? task.taskNumber : 1,
+          participantName: studyState.participantName,
+        };
+      }
+      return { success: true, shouldRecord: false };
     }
 
     default:
@@ -524,6 +820,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+// ── Recorder Window Cleanup ────────────────────────────────
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (studyState && studyState.recorderWindowId === windowId) {
+    studyState.recorderWindowId = null;
+    studyState.isRecording = false;
+    persistState();
+    broadcastToTabs(MessageType.HIDE_RED_BORDER, {});
+  }
+});
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function broadcastToTabs(type, payload) {
@@ -537,7 +843,7 @@ function broadcastToTabs(type, payload) {
 }
 
 function buildCSV(session, events) {
-  const header = 'session_id,user_email,task_name,task_status,session_duration_ms,event_id,event_type,event_timestamp,event_timestamp_readable,event_url,event_data';
+  const header = 'session_id,study_id,user_name,user_email,task_name,task_number,task_status,session_duration_ms,event_id,event_type,event_timestamp,event_timestamp_readable,event_url,event_data';
   return header + '\n' + buildRows(session, events).join('\n');
 }
 
@@ -547,8 +853,11 @@ function buildRows(session, events) {
     const readable = new Date(event.timestamp).toISOString();
     return [
       session.id,
+      csvEscape(session.studyId || ''),
+      csvEscape(session.userName || ''),
       csvEscape(session.userEmail),
       csvEscape(session.taskName),
+      session.taskNumber || '',
       session.status,
       session.durationMs || '',
       event.id,

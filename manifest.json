@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "UX Pulse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automated UX session recording — track clicks, scrolls, navigation, hesitation, and API requests with structured event logs.",
   "permissions": [
     "tabs",

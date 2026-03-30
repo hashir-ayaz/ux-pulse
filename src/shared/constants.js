@@ -54,6 +54,13 @@ const EventType = Object.freeze({
   WINDOW_RESIZE:       'WINDOW_RESIZE',
   COPY:                'COPY',
   PASTE:               'PASTE',
+
+  // Study tasks
+  TASK_START:          'TASK_START',
+  TASK_COMPLETE:       'TASK_COMPLETE',
+  TASK_SKIP:           'TASK_SKIP',
+  STUDY_START:         'STUDY_START',
+  STUDY_END:           'STUDY_END',
 });
 
 /**
@@ -88,6 +95,24 @@ const MessageType = Object.freeze({
 
   // Keepalive
   PING:                'PING',
+
+  // Study control
+  START_STUDY:         'START_STUDY',
+  START_TASK:          'START_TASK',
+  COMPLETE_TASK:       'COMPLETE_TASK',
+  SKIP_TASK:           'SKIP_TASK',
+  GET_STUDY_STATE:     'GET_STUDY_STATE',
+
+  // Screen recording
+  START_SCREEN_RECORDING:   'START_SCREEN_RECORDING',
+  STOP_SCREEN_RECORDING:    'STOP_SCREEN_RECORDING',
+  SCREEN_RECORDING_ACTIVE:  'SCREEN_RECORDING_ACTIVE',
+  SCREEN_RECORDING_STOPPED: 'SCREEN_RECORDING_STOPPED',
+  CLOSE_RECORDER:           'CLOSE_RECORDER',
+
+  // Visual indicators
+  SHOW_RED_BORDER:     'SHOW_RED_BORDER',
+  HIDE_RED_BORDER:     'HIDE_RED_BORDER',
 });
 
 /**
@@ -126,3 +151,27 @@ const Config = Object.freeze({
   SCREENSHOT_QUALITY:    60,
   SCREENSHOT_FORMAT:     'jpeg',
 });
+
+/**
+ * Hardcoded study tasks for the Crumble usability study.
+ */
+const StudyTasks = Object.freeze([
+  {
+    taskNumber: 1,
+    title: 'Register / Sign In',
+    goal: 'Create a new account using a phone number',
+    description: 'Starting from the Crumble homepage, register for a new account using your phone number. Complete the registration process successfully.',
+  },
+  {
+    taskNumber: 2,
+    title: 'Add to Cart & Checkout',
+    goal: 'Find the Cookies & Cream Shake, add it to your cart, and navigate to the checkout page',
+    description: 'Browse the menu to find the Cookies & Cream Shake. Add it to your cart and proceed all the way to the checkout page.',
+  },
+  {
+    taskNumber: 3,
+    title: 'Contact Customer Support',
+    goal: 'Send a message to customer support via the chat feature',
+    description: 'Locate the customer support chat feature on the website and send a message to the support team.',
+  },
+]);

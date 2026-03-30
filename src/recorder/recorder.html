@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UX Pulse — Screen Recorder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="recorder.css">
+</head>
+<body>
+  <div class="recorder-app">
+    <div class="recorder-header">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span class="recorder-title">Screen Recorder</span>
+    </div>
+
+    <div id="state-idle" class="recorder-state">
+      <p class="recorder-msg">Waiting to start...</p>
+    </div>
+
+    <div id="state-prompt" class="recorder-state" style="display:none;">
+      <p class="recorder-msg">Click below to share your screen</p>
+      <button id="btn-share" class="btn-share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        Share Screen
+      </button>
+    </div>
+
+    <div id="state-recording" class="recorder-state" style="display:none;">
+      <div class="recording-indicator">
+        <span class="rec-dot"></span>
+        <span class="rec-label">Recording Task <span id="rec-task-num">1</span></span>
+      </div>
+      <p class="recorder-hint">Do not close this window</p>
+    </div>
+
+    <div id="state-saving" class="recorder-state" style="display:none;">
+      <p class="recorder-msg">Saving recording...</p>
+    </div>
+  </div>
+  <script src="recorder.js"></script>
+</body>
+</html>

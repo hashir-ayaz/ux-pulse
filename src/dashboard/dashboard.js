@@ -103,7 +103,8 @@
       const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
       tr.innerHTML = `
-        <td class="email">${escapeHtml(session.userEmail)}</td>
+        <td class="email">${escapeHtml(session.userName || session.userEmail)}</td>
+        <td class="mono" style="text-align:center;">${session.taskNumber || '--'}</td>
         <td class="task">${escapeHtml(session.taskName)}</td>
         <td><span class="status-pill ${session.status}">${session.status}</span></td>
         <td class="mono">${duration}</td>
