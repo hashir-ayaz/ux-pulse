@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UX Pulse — Study Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="analytics.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <h1>UX Pulse</h1>
+        <span class="topbar-subtitle">Study Analytics</span>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-back" class="btn btn-outline">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/>
+            <polyline points="12 19 5 12 12 5"/>
+          </svg>
+          Back to Dashboard
+        </button>
+      </div>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading" class="loading-state">
+      <p>Loading analytics data...</p>
+    </div>
+
+    <!-- Content (hidden until data loads) -->
+    <div id="content" style="display:none;">
+
+      <!-- Summary Stats -->
+      <div class="summary-row">
+        <div class="stat-card">
+          <span class="stat-card-value" id="stat-participants">--</span>
+          <span class="stat-card-label">Participants</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-value" id="stat-completion">--</span>
+          <span class="stat-card-label">Avg Completion Rate</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-value" id="stat-avg-time">--</span>
+          <span class="stat-card-label">Avg Task Time</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-value" id="stat-events">--</span>
+          <span class="stat-card-label">Total Events</span>
+        </div>
+      </div>
+
+      <!-- Chart 1: Task Success Rate -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2>Task Success Rate</h2>
+          <p class="chart-desc">Completed vs skipped per task. Shows which tasks caused the most failures.</p>
+        </div>
+        <div class="chart-body">
+          <canvas id="chart-success" height="300"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Completion Time Box Plot -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2>Task Completion Time Distribution</h2>
+          <p class="chart-desc">Box-and-whisker plot showing time spread per task. Wider boxes = more variation in user performance.</p>
+        </div>
+        <div class="chart-body">
+          <canvas id="chart-boxplot" height="300"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 3: Frustration Heatmap -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2>Frustration Heatmap</h2>
+          <p class="chart-desc">Each cell shows a participant's frustration score per task (rage clicks + dead clicks + form errors). Darker red = more friction.</p>
+        </div>
+        <div class="chart-body heatmap-body">
+          <div class="heatmap-legend">
+            <span>Low</span>
+            <div class="heatmap-gradient"></div>
+            <span>High</span>
+          </div>
+          <div id="heatmap-container" class="heatmap-container">
+            <!-- Generated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart 4: Event Distribution -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2>Event Distribution by Task</h2>
+          <p class="chart-desc">Behavioral fingerprint: how event types differ across the three tasks.</p>
+        </div>
+        <div class="chart-body">
+          <canvas id="chart-events" height="320"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 5: Hypothesis Validation -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2>Hypothesis Validation</h2>
+          <p class="chart-desc">Empirical results measured against pre-defined thresholds from the study design.</p>
+        </div>
+        <div class="chart-body">
+          <div id="hypothesis-cards" class="hypothesis-cards">
+            <!-- Generated dynamically -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="../lib/chart.umd.min.js"></script>
+  <script src="analytics.js"></script>
+</body>
+</html>

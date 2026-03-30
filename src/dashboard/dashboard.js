@@ -14,6 +14,8 @@
     EXPORT_ALL: 'EXPORT_ALL',
     DELETE_SESSION: 'DELETE_SESSION',
     CLEAR_ALL: 'CLEAR_ALL',
+    IMPORT_SESSION: 'IMPORT_SESSION',
+    IMPORT_EVENTS: 'IMPORT_EVENTS',
   };
 
   // ── State ─────────────────────────────────────────────
@@ -463,9 +465,176 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ── CSV Import ─────────────────────────────────────────
+
+  const csvFileInput = document.getElementById('csv-file-input');
+
+  function onImportCSV() {
+    csvFileInput.click();
+  }
+
+  async function handleCSVImport(file) {
+    const text = await file.text();
+    const lines = parseCSVLines(text);
+    if (lines.length < 2) { alert('CSV file is empty or invalid.'); return; }
+
+    const headers = lines[0];
+    const colIdx = {};
+    headers.forEach((h, i) => { colIdx[h.trim()] = i; });
+
+    // Required columns check
+    const required = ['session_id', 'task_name', 'task_status', 'event_type', 'event_timestamp'];
+    for (const r of required) {
+      if (!(r in colIdx)) { alert('Missing column: ' + r); return; }
+    }
+
+    // Group rows by session
+    const sessionMap = {};
+    const eventRows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const row = lines[i];
+      if (row.length < headers.length) continue;
+
+      const sid = row[colIdx['session_id']];
+      if (!sid) continue;
+
+      if (!sessionMap[sid]) {
+        sessionMap[sid] = {
+          id: sid,
+          studyId: row[colIdx['study_id']] || '',
+          userName: row[colIdx['user_name']] || '',
+          userEmail: row[colIdx['user_email']] || '',
+          taskName: row[colIdx['task_name']] || '',
+          taskNumber: parseInt(row[colIdx['task_number']]) || 0,
+          status: row[colIdx['task_status']] || 'completed',
+          durationMs: parseInt(row[colIdx['session_duration_ms']]) || 0,
+          startTime: null,
+          endTime: null,
+          eventCount: 0,
+          startUrl: '',
+          taskDescription: '',
+        };
+      }
+      sessionMap[sid].eventCount++;
+
+      const ts = parseInt(row[colIdx['event_timestamp']]) || Date.now();
+      if (!sessionMap[sid].startTime || ts < sessionMap[sid].startTime) {
+        sessionMap[sid].startTime = ts;
+      }
+      if (!sessionMap[sid].endTime || ts > sessionMap[sid].endTime) {
+        sessionMap[sid].endTime = ts;
+      }
+
+      // Parse event_data JSON
+      let eventData = {};
+      try {
+        const raw = row[colIdx['event_data']] || '{}';
+        eventData = JSON.parse(raw);
+      } catch (e) {}
+
+      eventRows.push({
+        sessionId: sid,
+        type: row[colIdx['event_type']] || '',
+        timestamp: ts,
+        url: row[colIdx['event_url']] || '',
+        tabId: 0,
+        data: eventData,
+      });
+    }
+
+    // Import sessions then events via service worker
+    const sessionList = Object.values(sessionMap);
+    let importedSessions = 0;
+    let importedEvents = 0;
+
+    // Import sessions in batches
+    for (const s of sessionList) {
+      try {
+        const resp = await sendMessage(MSG.IMPORT_SESSION, { session: s });
+        if (resp && resp.success) importedSessions++;
+      } catch (e) {
+        console.error('Failed to import session:', s.id, e);
+      }
+    }
+
+    // Import events in batches of 100
+    for (let i = 0; i < eventRows.length; i += 100) {
+      const batch = eventRows.slice(i, i + 100);
+      try {
+        const resp = await sendMessage(MSG.IMPORT_EVENTS, { events: batch });
+        if (resp && resp.success) importedEvents += batch.length;
+      } catch (e) {
+        console.error('Failed to import events batch:', e);
+      }
+    }
+
+    alert('Imported ' + importedSessions + ' sessions and ' + importedEvents + ' events.');
+    await loadSessions();
+  }
+
+  // Simple CSV parser that handles quoted fields with commas and escaped quotes
+  function parseCSVLines(text) {
+    const lines = [];
+    let current = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < text.length && text[i + 1] === '"') {
+            field += '"';
+            i++; // skip escaped quote
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          current.push(field);
+          field = '';
+        } else if (ch === '\n') {
+          current.push(field);
+          field = '';
+          if (current.length > 1 || current[0] !== '') lines.push(current);
+          current = [];
+        } else if (ch === '\r') {
+          // skip
+        } else {
+          field += ch;
+        }
+      }
+    }
+    // Last field/line
+    if (field || current.length > 0) {
+      current.push(field);
+      if (current.length > 1 || current[0] !== '') lines.push(current);
+    }
+
+    return lines;
+  }
+
   // ── Event Bindings ────────────────────────────────────
 
+  document.getElementById('btn-import-csv').addEventListener('click', onImportCSV);
+  csvFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleCSVImport(file);
+      csvFileInput.value = ''; // reset for re-import
+    }
+  });
   document.getElementById('btn-export-all').addEventListener('click', exportAllCSV);
+  document.getElementById('btn-analytics').addEventListener('click', () => {
+    window.location.href = '../analytics/analytics.html';
+  });
   document.getElementById('btn-clear-all').addEventListener('click', confirmClearAll);
   document.getElementById('btn-export-session').addEventListener('click', exportSessionCSV);
   document.getElementById('btn-close-panel').addEventListener('click', () => {

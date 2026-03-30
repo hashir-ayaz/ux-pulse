@@ -397,6 +397,27 @@ async function handleMessage(msg, sender) {
       return { success: true };
     }
 
+    case 'IMPORT_SESSION': {
+      const s = msg.session;
+      if (!s || !s.id) return { success: false, error: 'Invalid session' };
+      await dbPut('sessions', s);
+      return { success: true };
+    }
+
+    case 'IMPORT_EVENTS': {
+      const events = msg.events;
+      if (!events || !events.length) return { success: false, error: 'No events' };
+      const db = await getDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('events', 'readwrite');
+        const store = tx.objectStore('events');
+        for (const event of events) store.add(event);
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+      });
+      return { success: true };
+    }
+
     case MessageType.PING: {
       return { success: true, alive: true };
     }
