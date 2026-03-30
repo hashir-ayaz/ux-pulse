@@ -42,6 +42,34 @@
 
   // ── Screen Capture ────────────────────────────────────
 
+  async function startWithTabCapture(streamId) {
+    try {
+      // Stop previous stream if it exists
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        mediaStream = null;
+      }
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          mandatory: {
+            chromeMediaSource: 'tab',
+            chromeMediaSourceId: streamId,
+          }
+        }
+      });
+
+      mediaStream.getVideoTracks()[0].addEventListener('ended', () => {
+        handleStreamLost();
+      });
+
+      startMediaRecorder();
+    } catch (err) {
+      console.error('[UX Pulse Recorder] Tab capture failed, falling back to manual share:', err);
+      showState('state-prompt');
+    }
+  }
+
   async function requestScreenShare() {
     try {
       mediaStream = await navigator.mediaDevices.getDisplayMedia({
@@ -165,7 +193,10 @@
           break;
         }
 
-        if (mediaStream && mediaStream.active) {
+        if (message.streamId) {
+          // Auto-start via tab capture — no user interaction needed
+          startWithTabCapture(message.streamId);
+        } else if (mediaStream && mediaStream.active) {
           // Reuse existing stream for subsequent tasks
           startMediaRecorder();
         } else {
@@ -207,7 +238,9 @@
     if (resp && resp.shouldRecord) {
       currentTaskNumber = resp.taskNumber || 1;
       participantName = resp.participantName || 'participant';
-      if (mediaStream && mediaStream.active) {
+      if (resp.streamId) {
+        startWithTabCapture(resp.streamId);
+      } else if (mediaStream && mediaStream.active) {
         startMediaRecorder();
       } else {
         showState('state-prompt');

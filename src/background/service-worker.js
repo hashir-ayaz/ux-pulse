@@ -453,6 +453,16 @@ async function handleMessage(msg, sender) {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const startUrl = tab ? tab.url : '';
 
+      // Get tab capture stream ID for automatic screen recording
+      let streamId = null;
+      if (tab && tab.id) {
+        try {
+          streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+        } catch (err) {
+          console.warn('[UX Pulse] Tab capture failed, will fall back to manual share:', err);
+        }
+      }
+
       const session = {
         id: crypto.randomUUID(),
         studyId: studyState.studyId,
@@ -480,6 +490,7 @@ async function handleMessage(msg, sender) {
 
       studyState.currentSessionId = session.id;
       studyState.currentTaskIndex = taskIndex;
+      studyState.currentStreamId = streamId;
       await persistState();
 
       // Log task start event
@@ -499,6 +510,7 @@ async function handleMessage(msg, sender) {
         type: MessageType.START_SCREEN_RECORDING,
         taskNumber: task.taskNumber,
         participantName: studyState.participantName,
+        streamId,
       };
       chrome.runtime.sendMessage(recMsg).catch(() => {
         setTimeout(() => chrome.runtime.sendMessage(recMsg).catch(() => {}), 500);
@@ -674,6 +686,7 @@ async function handleMessage(msg, sender) {
           shouldRecord: true,
           taskNumber: task ? task.taskNumber : 1,
           participantName: studyState.participantName,
+          streamId: studyState.currentStreamId || null,
         };
       }
       return { success: true, shouldRecord: false };
